@@ -69,7 +69,7 @@ static void prvInitializeStaticCond( pthread_cond_internal_t * pxCond )
             /* Set the members of the cond. The semaphore create calls will never fail
              * when their arguments aren't NULL. */
             pxCond->xIsInitialized = pdTRUE;
-            ( void ) xSemaphoreCreateCountingStatic( INT_MAX, 0U, &pxCond->xCondWaitSemaphore );
+            pxCond->xCondWaitSemaphore = xSemaphoreCreateCounting( INT_MAX, 0U );
             pxCond->iWaitingThreads = 0;
         }
 
@@ -123,7 +123,7 @@ int pthread_cond_broadcast( pthread_cond_t * cond )
             /* Unblock all. */
             for( i = 0; i < iLocalWaitingThreads; i++ )
             {
-                ( void ) xSemaphoreGive( ( SemaphoreHandle_t ) &pxCond->xCondWaitSemaphore );
+                ( void ) xSemaphoreGive( pxCond->xCondWaitSemaphore );
             }
 
             break;
@@ -143,7 +143,7 @@ int pthread_cond_destroy( pthread_cond_t * cond )
     pthread_cond_internal_t * pxCond = ( pthread_cond_internal_t * ) ( cond );
 
     /* Free all resources in use by the cond. */
-    vSemaphoreDelete( ( SemaphoreHandle_t ) &pxCond->xCondWaitSemaphore );
+    vSemaphoreDelete( pxCond->xCondWaitSemaphore );
 
     return 0;
 }
@@ -170,7 +170,7 @@ int pthread_cond_init( pthread_cond_t * cond,
          * when their arguments aren't NULL. */
         pxCond->xIsInitialized = pdTRUE;
 
-        ( void ) xSemaphoreCreateCountingStatic( INT_MAX, 0U, &pxCond->xCondWaitSemaphore );
+        pxCond->xCondWaitSemaphore  = xSemaphoreCreateCounting( INT_MAX, 0U );
         pxCond->iWaitingThreads = 0;
     }
 
@@ -197,7 +197,7 @@ int pthread_cond_signal( pthread_cond_t * cond )
         if( ATOMIC_COMPARE_AND_SWAP_SUCCESS == Atomic_CompareAndSwap_u32( ( uint32_t * ) &pxCond->iWaitingThreads, ( uint32_t ) iLocalWaitingThreads - 1, ( uint32_t ) iLocalWaitingThreads ) )
         {
             /* Unblock one. */
-            ( void ) xSemaphoreGive( ( SemaphoreHandle_t ) &pxCond->xCondWaitSemaphore );
+            ( void ) xSemaphoreGive( pxCond->xCondWaitSemaphore );
 
             /* Signal one succeeded. Break. */
             break;
@@ -216,7 +216,7 @@ int pthread_cond_timedwait( pthread_cond_t * cond,
                             pthread_mutex_t * mutex,
                             const struct timespec * abstime )
 {
-    unsigned iLocalWaitingThreads;
+    unsigned iLocalWaitingThreads = 0;
     int iStatus = 0;
     pthread_cond_internal_t * pxCond = ( pthread_cond_internal_t * ) ( cond );
     TickType_t xDelay = portMAX_DELAY;
@@ -254,7 +254,7 @@ int pthread_cond_timedwait( pthread_cond_t * cond,
     /* Wait on the condition variable. */
     if( iStatus == 0 )
     {
-        if( xSemaphoreTake( ( SemaphoreHandle_t ) &pxCond->xCondWaitSemaphore,
+        if( xSemaphoreTake( pxCond->xCondWaitSemaphore,
                             xDelay ) == pdPASS )
         {
             /* When successful, relock mutex. */

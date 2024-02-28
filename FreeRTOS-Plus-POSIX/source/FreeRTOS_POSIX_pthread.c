@@ -61,8 +61,8 @@ typedef struct pthread_internal
     void * ( *pvStartRoutine )( void * ); /**< Application thread function. */
     void * xTaskArg;                      /**< Arguments for application thread function. */
     TaskHandle_t xTaskHandle;             /**< FreeRTOS task handle. */
-    StaticSemaphore_t xJoinBarrier;       /**< Synchronizes the two callers of pthread_join. */
-    StaticSemaphore_t xJoinMutex;         /**< Ensures that only one other thread may join this thread. */
+    SemaphoreHandle_t xJoinBarrier;       /**< Synchronizes the two callers of pthread_join. */
+    SemaphoreHandle_t xJoinMutex;         /**< Ensures that only one other thread may join this thread. */
     void * xReturn;                       /**< Return value of pvStartRoutine. */
 } pthread_internal_t;
 
@@ -104,7 +104,7 @@ static void prvExitThread( void )
     /* If this thread is joinable, wait for a call to pthread_join. */
     if( pthreadIS_JOINABLE( pxThread->xAttr.usSchedPriorityDetachState ) )
     {
-        ( void ) xSemaphoreGive( ( SemaphoreHandle_t ) &pxThread->xJoinBarrier );
+        ( void ) xSemaphoreGive( pxThread->xJoinBarrier );
 
         /* Suspend until the call to pthread_join. The caller of pthread_join
          * will perform cleanup. */
@@ -326,8 +326,8 @@ int pthread_create( pthread_t * thread,
         if( pthreadIS_JOINABLE( pxThread->xAttr.usSchedPriorityDetachState ) )
         {
             /* These calls will not fail when their arguments aren't NULL. */
-            ( void ) xSemaphoreCreateMutexStatic( &pxThread->xJoinMutex );
-            ( void ) xSemaphoreCreateBinaryStatic( &pxThread->xJoinBarrier );
+            pxThread->xJoinMutex =  xSemaphoreCreateMutex();
+            pxThread->xJoinBarrier =  xSemaphoreCreateBinary();
         }
     }
 
@@ -420,7 +420,7 @@ int pthread_join( pthread_t pthread,
      * to prevent other threads from calling pthread_join on the same thread. */
     if( iStatus == 0 )
     {
-        if( xSemaphoreTake( ( SemaphoreHandle_t ) &pxThread->xJoinMutex, 0 ) != pdPASS )
+        if( xSemaphoreTake( pxThread->xJoinMutex, 0 ) != pdPASS )
         {
             /* Another thread has already joined the requested thread, which would
              * cause this thread to wait forever. */
@@ -441,18 +441,18 @@ int pthread_join( pthread_t pthread,
     {
         /* Wait for the joining thread to finish. Because this call waits forever,
          * it should never fail. */
-        ( void ) xSemaphoreTake( ( SemaphoreHandle_t ) &pxThread->xJoinBarrier, portMAX_DELAY );
+        ( void ) xSemaphoreTake( pxThread->xJoinBarrier, portMAX_DELAY );
 
         /* Create a critical section to clean up the joined thread. */
         vTaskSuspendAll();
 
         /* Release xJoinBarrier and delete it. */
-        ( void ) xSemaphoreGive( ( SemaphoreHandle_t ) &pxThread->xJoinBarrier );
-        vSemaphoreDelete( ( SemaphoreHandle_t ) &pxThread->xJoinBarrier );
+        ( void ) xSemaphoreGive( pxThread->xJoinBarrier );
+        vSemaphoreDelete( pxThread->xJoinBarrier );
 
         /* Release xJoinMutex and delete it. */
-        ( void ) xSemaphoreGive( ( SemaphoreHandle_t ) &pxThread->xJoinMutex );
-        vSemaphoreDelete( ( SemaphoreHandle_t ) &pxThread->xJoinMutex );
+        ( void ) xSemaphoreGive( pxThread->xJoinMutex );
+        vSemaphoreDelete( pxThread->xJoinMutex );
 
         /* Delete the FreeRTOS task that ran the thread. */
         vTaskDelete( pxThread->xTaskHandle );
@@ -502,12 +502,12 @@ int pthread_detach(pthread_t pthread)
         else
         {
            /* Release xJoinBarrier and delete it. */
-            ( void ) xSemaphoreGive( ( SemaphoreHandle_t ) &pxThread->xJoinBarrier );
-            vSemaphoreDelete( ( SemaphoreHandle_t ) &pxThread->xJoinBarrier );
+            ( void ) xSemaphoreGive( pxThread->xJoinBarrier );
+            vSemaphoreDelete( pxThread->xJoinBarrier );
 
             /* Release xJoinMutex and delete it. */
-            ( void ) xSemaphoreGive( ( SemaphoreHandle_t ) &pxThread->xJoinMutex );
-            vSemaphoreDelete( ( SemaphoreHandle_t ) &pxThread->xJoinMutex );
+            ( void ) xSemaphoreGive( pxThread->xJoinMutex );
+            vSemaphoreDelete( pxThread->xJoinMutex );
 
             /* Thread has been finished */
             if ( pThreadState == eSuspended )

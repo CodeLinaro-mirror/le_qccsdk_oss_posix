@@ -37,6 +37,7 @@
 #include "FreeRTOS_POSIX/fcntl.h"
 #include "FreeRTOS_POSIX/mqueue.h"
 #include "FreeRTOS_POSIX/utils.h"
+#include "safeAPI.h"
 
 /**
  * @brief Element of the FreeRTOS queues that store mq data.
@@ -142,7 +143,7 @@ static BaseType_t prvValidateQueueName( const char * const pcName,
 /**
  * @brief Guards access to the list of message queues.
  */
-static StaticSemaphore_t xQueueListMutex = { { 0 }, .u = { 0 } };
+static SemaphoreHandle_t xQueueListMutex = NULL;
 
 /**
  * @brief Head of the linked list of queues.
@@ -246,7 +247,7 @@ static BaseType_t prvCreateNewMessageQueue( QueueListElement_t ** ppxMessageQueu
         {
             /* Copy queue name. Copying xNameLength+1 will cause strncpy to add
              * the null-terminator. */
-            ( void ) strncpy( ( *ppxMessageQueue )->pcName, pcName, xNameLength + 1 );
+            ( void ) strlcpy( ( *ppxMessageQueue )->pcName, pcName, xNameLength + 1 );
         }
     }
 
@@ -350,7 +351,7 @@ static void prvInitializeQueueList( void )
         if( xQueueListInitialized == pdFALSE )
         {
             /* Initialize the queue list mutex and list head. */
-            ( void ) xSemaphoreCreateMutexStatic( &xQueueListMutex );
+            xQueueListMutex = xSemaphoreCreateMutex();
             listINIT_HEAD( &xQueueListHead );
             xQueueListInitialized = pdTRUE;
         }
@@ -406,7 +407,7 @@ int mq_close( mqd_t mqdes )
 
     /* Lock the mutex that guards access to the queue list. This call will
      * never fail because it blocks forever. */
-    ( void ) xSemaphoreTake( ( SemaphoreHandle_t ) &xQueueListMutex, portMAX_DELAY );
+    ( void ) xSemaphoreTake( xQueueListMutex, portMAX_DELAY );
 
     /* Attempt to find the message queue based on the given descriptor. */
     if( prvFindQueueInList( NULL, NULL, mqdes ) == pdTRUE )
@@ -445,7 +446,7 @@ int mq_close( mqd_t mqdes )
     }
 
     /* Release the mutex protecting the queue list. */
-    ( void ) xSemaphoreGive( ( SemaphoreHandle_t ) &xQueueListMutex );
+    ( void ) xSemaphoreGive( xQueueListMutex );
 
     /* Delete all resources used by the queue if needed. */
     if( xQueueRemoved == pdTRUE )
@@ -466,7 +467,7 @@ int mq_getattr( mqd_t mqdes,
 
     /* Lock the mutex that guards access to the queue list. This call will
      * never fail because it blocks forever. */
-    ( void ) xSemaphoreTake( ( SemaphoreHandle_t ) &xQueueListMutex, portMAX_DELAY );
+    ( void ) xSemaphoreTake( xQueueListMutex, portMAX_DELAY );
 
     /* Find the mq referenced by mqdes. */
     if( prvFindQueueInList( NULL, NULL, mqdes ) == pdTRUE )
@@ -484,7 +485,7 @@ int mq_getattr( mqd_t mqdes,
     }
 
     /* Release the mutex protecting the queue list. */
-    ( void ) xSemaphoreGive( ( SemaphoreHandle_t ) &xQueueListMutex );
+    ( void ) xSemaphoreGive( xQueueListMutex );
 
     return iStatus;
 }
@@ -537,7 +538,7 @@ mqd_t mq_open( const char * name,
     {
         /* Lock the mutex that guards access to the queue list. This call will
          * never fail because it blocks forever. */
-        ( void ) xSemaphoreTake( ( SemaphoreHandle_t ) &xQueueListMutex, portMAX_DELAY );
+        ( void ) xSemaphoreTake( xQueueListMutex, portMAX_DELAY );
 
         /* Search the queue list to check if the queue exists. */
         if( prvFindQueueInList( ( QueueListElement_t ** ) &xMessageQueue,
@@ -600,7 +601,7 @@ mqd_t mq_open( const char * name,
         }
 
         /* Release the mutex protecting the queue list. */
-        ( void ) xSemaphoreGive( ( SemaphoreHandle_t ) &xQueueListMutex );
+        ( void ) xSemaphoreGive( xQueueListMutex );
     }
 
     return xMessageQueue;
@@ -645,7 +646,7 @@ ssize_t mq_timedreceive( mqd_t mqdes,
 
     /* Lock the mutex that guards access to the queue list. This call will
      * never fail because it blocks forever. */
-    ( void ) xSemaphoreTake( ( SemaphoreHandle_t ) &xQueueListMutex, portMAX_DELAY );
+    ( void ) xSemaphoreTake( xQueueListMutex, portMAX_DELAY );
 
     /* Find the mq referenced by mqdes. */
     if( prvFindQueueInList( NULL, NULL, mqdes ) == pdFALSE )
@@ -681,7 +682,7 @@ ssize_t mq_timedreceive( mqd_t mqdes,
     }
 
     /* Release the mutex protecting the queue list. */
-    ( void ) xSemaphoreGive( ( SemaphoreHandle_t ) &xQueueListMutex );
+    ( void ) xSemaphoreGive( xQueueListMutex );
 
     if( xStatus == 0 )
     {
@@ -712,7 +713,7 @@ ssize_t mq_timedreceive( mqd_t mqdes,
         xStatus = ( ssize_t ) xReceiveData.xDataSize;
 
         /* Copy received data into given buffer, then free it. */
-        ( void ) memcpy( msg_ptr, xReceiveData.pcData, xReceiveData.xDataSize );
+        ( void ) memscpy( msg_ptr, xReceiveData.xDataSize, xReceiveData.pcData, xReceiveData.xDataSize );
         vPortFree( xReceiveData.pcData );
     }
 
@@ -737,7 +738,7 @@ int mq_timedsend( mqd_t mqdes,
 
     /* Lock the mutex that guards access to the queue list. This call will
      * never fail because it blocks forever. */
-    ( void ) xSemaphoreTake( ( SemaphoreHandle_t ) &xQueueListMutex, portMAX_DELAY );
+    ( void ) xSemaphoreTake( xQueueListMutex, portMAX_DELAY );
 
     /* Find the mq referenced by mqdes. */
     if( prvFindQueueInList( NULL, NULL, mqdes ) == pdFALSE )
@@ -773,7 +774,7 @@ int mq_timedsend( mqd_t mqdes,
     }
 
     /* Release the mutex protecting the queue list. */
-    ( void ) xSemaphoreGive( ( SemaphoreHandle_t ) &xQueueListMutex );
+    ( void ) xSemaphoreGive( xQueueListMutex );
 
     /* Allocate memory for the message. */
     if( iStatus == 0 )
@@ -791,7 +792,7 @@ int mq_timedsend( mqd_t mqdes,
         else
         {
             /* Copy the data to send. */
-            ( void ) memcpy( xSendData.pcData, msg_ptr, msg_len );
+            ( void ) memscpy( xSendData.pcData, msg_len, msg_ptr, msg_len );
         }
     }
 
@@ -848,7 +849,7 @@ int mq_unlink( const char * name )
     {
         /* Lock the mutex that guards access to the queue list. This call will
          * never fail because it blocks forever. */
-        ( void ) xSemaphoreTake( ( SemaphoreHandle_t ) &xQueueListMutex, portMAX_DELAY );
+        ( void ) xSemaphoreTake( xQueueListMutex, portMAX_DELAY );
 
         /* Check if the named queue exists. */
         if( prvFindQueueInList( &pxMessageQueue, name, ( mqd_t ) NULL ) == pdTRUE )
@@ -878,7 +879,7 @@ int mq_unlink( const char * name )
         }
 
         /* Release the mutex protecting the queue list. */
-        ( void ) xSemaphoreGive( ( SemaphoreHandle_t ) &xQueueListMutex );
+        ( void ) xSemaphoreGive( xQueueListMutex );
     }
 
     /* Delete all resources used by the queue if needed. */

@@ -137,12 +137,12 @@ int timer_create( clockid_t clockid,
         /* Create a new FreeRTOS timer. This call will not fail because the
          * memory for it has already been allocated, so the output parameter is
          * also set. */
-        *timerid = ( timer_t ) xTimerCreateStatic( posixconfigTIMER_NAME,    /* Timer name. */
+        *timerid = ( timer_t ) xTimerCreate( posixconfigTIMER_NAME,    /* Timer name. */
                                                    portMAX_DELAY,            /* Initial timer period. Timers are created disarmed. */
                                                    pdFALSE,                  /* Don't auto-reload timer. */
                                                    ( void * ) pxTimer,       /* Timer id. */
-                                                   prvTimerCallback,         /* Timer expiration callback. */
-                                                   &pxTimer->xTimerBuffer ); /* Pre-allocated memory for timer. */
+                                                   prvTimerCallback );         /* Timer expiration callback. */
+                                                   //&pxTimer->xTimerBuffer ); /* Pre-allocated memory for timer. */
     }
 
     return iStatus;

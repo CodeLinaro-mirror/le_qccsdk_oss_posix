@@ -52,7 +52,7 @@
     typedef struct pthread_mutex_internal
     {
         BaseType_t xIsInitialized;          /**< Set to pdTRUE if this mutex is initialized, pdFALSE otherwise. */
-        StaticSemaphore_t xMutex;           /**< FreeRTOS mutex. */
+        SemaphoreHandle_t xMutex;           /**< FreeRTOS mutex. */
         TaskHandle_t xTaskOwner;            /**< Owner; used for deadlock detection and permission checks. */
         pthread_mutexattr_internal_t xAttr; /**< Mutex attributes. */
     } pthread_mutex_internal_t;
@@ -64,7 +64,7 @@
     ( ( ( pthread_mutex_internal_t )         \
     {                                        \
         .xIsInitialized = pdFALSE,           \
-        .xMutex = { { 0 } },                 \
+        .xMutex = NULL,                 \
         .xTaskOwner = NULL,                  \
         .xAttr = { .iType = 0 }              \
     }                                        \
@@ -80,7 +80,7 @@
     typedef struct pthread_cond_internal
     {
         BaseType_t xIsInitialized;            /**< Set to pdTRUE if this condition variable is initialized, pdFALSE otherwise. */
-        StaticSemaphore_t xCondWaitSemaphore; /**< Threads block on this semaphore in pthread_cond_wait. */
+        SemaphoreHandle_t xCondWaitSemaphore; /**< Threads block on this semaphore in pthread_cond_wait. */
         unsigned iWaitingThreads;             /**< The number of threads currently waiting on this condition variable. */
     } pthread_cond_internal_t;
 
@@ -92,7 +92,7 @@
     ( ( ( pthread_cond_internal_t )         \
     {                                       \
         .xIsInitialized = pdFALSE,          \
-        .xCondWaitSemaphore = { { 0 } },    \
+        .xCondWaitSemaphore = NULL,    \
         .iWaitingThreads = 0                \
     }                                       \
         )                                   \
@@ -107,7 +107,7 @@
  */
     typedef struct
     {
-        StaticSemaphore_t xSemaphore; /**< FreeRTOS semaphore. */
+        SemaphoreHandle_t xSemaphore; /**< FreeRTOS semaphore. */
         int value;                    /**< POSIX semaphore count. */
     } sem_internal_t;
 #endif /* if posixconfigENABLE_SEM_T == 1 */
@@ -121,8 +121,8 @@
     {
         unsigned uThreadCount;                   /**< Current number of threads that have entered barrier. */
         unsigned uThreshold;                     /**< The count argument of pthread_barrier_init. */
-        StaticSemaphore_t xThreadCountSemaphore; /**< Prevents more than uThreshold threads from exiting pthread_barrier_wait at once. */
-        StaticEventGroup_t xBarrierEventGroup;   /**< FreeRTOS event group that blocks to wait on threads entering barrier. */
+        SemaphoreHandle_t xThreadCountSemaphore; /**< Prevents more than uThreshold threads from exiting pthread_barrier_wait at once. */
+        EventGroupHandle_t xBarrierEventGroup;   /**< FreeRTOS event group that blocks to wait on threads entering barrier. */
     } pthread_barrier_internal_t;
 #endif /* if posixconfigENABLE_PTHREAD_BARRIER_T == 1 */
 

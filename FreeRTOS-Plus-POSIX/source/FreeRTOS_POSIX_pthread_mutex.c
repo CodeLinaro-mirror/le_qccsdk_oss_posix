@@ -79,9 +79,9 @@ static void prvInitializeStaticMutex( pthread_mutex_internal_t * pxMutex )
             /* Call the correct FreeRTOS mutex initialization function based on
              * the mutex type. */
             #if PTHREAD_MUTEX_DEFAULT == PTHREAD_MUTEX_RECURSIVE
-                ( void ) xSemaphoreCreateRecursiveMutexStatic( &pxMutex->xMutex );
+                pxMutex->xMutex = xSemaphoreCreateRecursiveMutex();
             #else
-                ( void ) xSemaphoreCreateMutexStatic( &pxMutex->xMutex );
+                pxMutex->xMutex = xSemaphoreCreateMutex();
             #endif
 
             pxMutex->xIsInitialized = pdTRUE;
@@ -101,7 +101,7 @@ int pthread_mutex_destroy( pthread_mutex_t * mutex )
     /* Free resources in use by the mutex. */
     if( pxMutex->xTaskOwner == NULL )
     {
-        vSemaphoreDelete( ( SemaphoreHandle_t ) &pxMutex->xMutex );
+        vSemaphoreDelete( pxMutex->xMutex );
     }
 
     return 0;
@@ -140,16 +140,16 @@ int pthread_mutex_init( pthread_mutex_t * mutex,
         if( pxMutex->xAttr.iType == PTHREAD_MUTEX_RECURSIVE )
         {
             /* Recursive mutex. */
-            ( void ) xSemaphoreCreateRecursiveMutexStatic( &pxMutex->xMutex );
+            pxMutex->xMutex = xSemaphoreCreateRecursiveMutex();
         }
         else
         {
             /* All other mutex types. */
-            ( void ) xSemaphoreCreateMutexStatic( &pxMutex->xMutex );
+            pxMutex->xMutex = xSemaphoreCreateMutex();
         }
 
         /* Ensure that the FreeRTOS mutex was successfully created. */
-        if( ( SemaphoreHandle_t ) &pxMutex->xMutex == NULL )
+        if( pxMutex->xMutex == NULL )
         {
             /* Failed to create mutex. Set error EAGAIN and free mutex object. */
             iStatus = EAGAIN;
@@ -225,11 +225,11 @@ int pthread_mutex_timedlock( pthread_mutex_t * mutex,
         /* Call the correct FreeRTOS mutex take function based on mutex type. */
         if( pxMutex->xAttr.iType == PTHREAD_MUTEX_RECURSIVE )
         {
-            xFreeRTOSMutexTakeStatus = xSemaphoreTakeRecursive( ( SemaphoreHandle_t ) &pxMutex->xMutex, xDelay );
+            xFreeRTOSMutexTakeStatus = xSemaphoreTakeRecursive( pxMutex->xMutex, xDelay );
         }
         else
         {
-            xFreeRTOSMutexTakeStatus = xSemaphoreTake( ( SemaphoreHandle_t ) &pxMutex->xMutex, xDelay );
+            xFreeRTOSMutexTakeStatus = xSemaphoreTake( pxMutex->xMutex, xDelay );
         }
 
         /* If the mutex was successfully taken, set its owner. */
@@ -298,16 +298,16 @@ int pthread_mutex_unlock( pthread_mutex_t * mutex )
         /* Call the correct FreeRTOS mutex unlock function based on mutex type. */
         if( pxMutex->xAttr.iType == PTHREAD_MUTEX_RECURSIVE )
         {
-            ( void ) xSemaphoreGiveRecursive( ( SemaphoreHandle_t ) &pxMutex->xMutex );
+            ( void ) xSemaphoreGiveRecursive( pxMutex->xMutex );
         }
         else
         {
-            ( void ) xSemaphoreGive( ( SemaphoreHandle_t ) &pxMutex->xMutex );
+            ( void ) xSemaphoreGive( pxMutex->xMutex );
         }
 
         /* Update the owner of the mutex. A recursive mutex may still have an
          * owner, so it should be updated with xSemaphoreGetMutexHolder. */
-        pxMutex->xTaskOwner = xSemaphoreGetMutexHolder( ( SemaphoreHandle_t ) &pxMutex->xMutex );
+        pxMutex->xTaskOwner = xSemaphoreGetMutexHolder( ( SemaphoreHandle_t ) pxMutex->xMutex );
 
         /* Resume the scheduler */
         ( void ) xTaskResumeAll();
